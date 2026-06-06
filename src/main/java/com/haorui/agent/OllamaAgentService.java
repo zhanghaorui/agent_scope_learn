@@ -70,7 +70,7 @@ public class OllamaAgentService {
                     log.debug("Chat response: sessionId={}, contentLength={}", sessionId, content.length());
                     return ChatResponse.success(sessionId, content);
                 })
-                .onErrorMap(e -> new AgentException("对话处理失败: " + e.getMessage(), sessionId, e))
+                .onErrorMap(e -> new AgentException("对话处理失败: " + e.getMessage(), e, sessionId))
                 .doOnNext(r -> log.info("Chat completed: sessionId={}, success={}", sessionId, r.isSuccess()));
     }
 
