@@ -1,4 +1,4 @@
-package com.haorui.agent;
+package com.haorui.service;
 
 import com.haorui.dto.ChatRequest;
 import com.haorui.dto.ChatResponse;

@@ -1,10 +1,11 @@
-package com.haorui.agent;
+package com.haorui.service.impl;
 
 import com.haorui.config.McpProperties;
 import com.haorui.config.OllamaProperties;
 import com.haorui.dto.ChatRequest;
 import com.haorui.dto.ChatResponse;
 import com.haorui.exception.AgentException;
+import com.haorui.service.McpAgentService;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.TextBlockDeltaEvent;

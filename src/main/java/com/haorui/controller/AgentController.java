@@ -1,6 +1,6 @@
 package com.haorui.controller;
 
-import com.haorui.agent.AgentChatService;
+import com.haorui.service.AgentChatService;
 import com.haorui.dto.ChatRequest;
 import com.haorui.dto.ChatResponse;
 import jakarta.validation.Valid;

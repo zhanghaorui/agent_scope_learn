@@ -1,17 +1,14 @@
-package com.haorui.agent;
+package com.haorui.service.impl;
 
 import com.haorui.config.OllamaProperties;
 import com.haorui.dto.ChatRequest;
 import com.haorui.dto.ChatResponse;
 import com.haorui.exception.AgentException;
-import com.haorui.tool.CalculatorTools;
-import com.haorui.tool.TextTools;
-import com.haorui.tool.TimeTools;
+import com.haorui.service.AgentChatService;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.UserMessage;
-import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -25,54 +22,29 @@ import java.nio.file.Paths;
 import java.util.UUID;
 
 /**
- * 工具分组Agent服务实现
+ * Ollama Agent服务实现
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ToolGroupedAgentServiceImpl implements ToolGroupedAgentService {
+public class OllamaAgentServiceImpl implements AgentChatService {
 
     private final OllamaProperties properties;
-    private final TimeTools timeTools;
-    private final CalculatorTools calculatorTools;
-    private final TextTools textTools;
-
     private HarnessAgent agent;
-    private Toolkit toolkit;
 
     @PostConstruct
     public void init() {
         Path workspace = Paths.get(properties.getWorkspacePath());
         String modelId = "ollama:" + properties.getModel();
 
-        // 创建Toolkit并定义分组
-        toolkit = new Toolkit();
-        toolkit.createToolGroup("time", "时间工具", true);
-        toolkit.createToolGroup("calc", "计算工具", true);
-        toolkit.createToolGroup("text", "文本工具", false);
-
-        // 注册工具到分组
-        toolkit.registration().tool(timeTools).group("time").apply();
-        toolkit.registration().tool(calculatorTools).group("calc").apply();
-        toolkit.registration().tool(textTools).group("text").apply();
-
-        // 构建Agent
         this.agent = HarnessAgent.builder()
-                .name("tool-assistant")
-                .sysPrompt(buildSystemPrompt())
+                .name(properties.getAgentName())
+                .sysPrompt(properties.getSysPrompt())
                 .model(modelId)
-                .toolkit(toolkit)
                 .workspace(workspace)
                 .build();
 
-        log.info("ToolGroupedAgent initialized: model={}, groups=time,calc,text", modelId);
-    }
-
-    private String buildSystemPrompt() {
-        return properties.getSysPrompt() + "\n\n你可以使用以下工具：\n" +
-                "- 时间工具：获取当前时间、星期几\n" +
-                "- 计算工具：数学计算、单位转换\n" +
-                "- 文本工具：字符统计、文本反转、数字提取";
+        log.info("OllamaAgent initialized: name={}, model={}", properties.getAgentName(), modelId);
     }
 
     @Override
@@ -83,7 +55,8 @@ public class ToolGroupedAgentServiceImpl implements ToolGroupedAgentService {
         return Mono.fromCallable(() -> request.getMessage())
                 .flatMap(message -> agent.call(new UserMessage(message), ctx))
                 .map(response -> ChatResponse.success(sessionId, response.getContent().toString()))
-                .onErrorMap(e -> new AgentException("对话处理失败: " + e.getMessage(), e, sessionId));
+                .onErrorMap(e -> new AgentException("对话处理失败: " + e.getMessage(), e, sessionId))
+                .doOnNext(r -> log.info("Chat completed: sessionId={}", sessionId));
     }
 
     @Override
@@ -95,18 +68,12 @@ public class ToolGroupedAgentServiceImpl implements ToolGroupedAgentService {
                 .filter(event -> event.getType() == AgentEventType.TEXT_BLOCK_DELTA)
                 .cast(TextBlockDeltaEvent.class)
                 .map(TextBlockDeltaEvent::getDelta)
-                .onErrorResume(e -> Flux.just("[错误] " + e.getMessage()));
+                .onErrorResume(e -> Flux.just("[错误] 流式输出失败: " + e.getMessage()));
     }
 
     @Override
-    public String getToolGroupStatus() {
-        return "工具分组状态:\n- time: 激活\n- calc: 激活\n- text: 未激活";
-    }
-
-    @Override
-    public void toggleToolGroup(String groupName, boolean active) {
-        toolkit.updateToolGroups(java.util.List.of(groupName), active);
-        log.info("Tool group '{}' toggled: {}", groupName, active ? "active" : "inactive");
+    public String getStatus() {
+        return "OllamaAgent状态: 就绪 (model=" + properties.getModel() + ")";
     }
 
     private RuntimeContext buildContext(String sessionId, ChatRequest request) {
