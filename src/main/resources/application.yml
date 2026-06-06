@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: agent-scope-learn
+
+# Ollama配置 (确保本地Ollama服务已启动，默认端口11434)
+# 启动Ollama: ollama serve
+# 拉取模型: ollama pull qwen2.5:7b (或其他模型如 llama3.2, mistral等)
+
+agentscope:
+  ollama:
+    base-url: http://localhost:11434
+    model: qwen2.5:7b  # 可根据本地已安装的模型修改
