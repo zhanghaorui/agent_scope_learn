@@ -21,13 +21,12 @@ import java.nio.file.Paths;
 import java.util.UUID;
 
 /**
- * Ollama Agent服务
- * 使用AgentScope Harness Agent连接本地Ollama
+ * Ollama Agent服务实现
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OllamaAgentService {
+public class OllamaAgentServiceImpl implements AgentChatService {
 
     private final OllamaProperties properties;
     private HarnessAgent agent;
@@ -44,16 +43,10 @@ public class OllamaAgentService {
                 .workspace(workspace)
                 .build();
 
-        log.info("HarnessAgent initialized: name={}, model={}, workspace={}",
-                properties.getAgentName(), modelId, workspace);
+        log.info("OllamaAgent initialized: name={}, model={}", properties.getAgentName(), modelId);
     }
 
-    /**
-     * 与Agent进行对话
-     *
-     * @param request 对话请求
-     * @return 对话响应
-     */
+    @Override
     public Mono<ChatResponse> chat(ChatRequest request) {
         String sessionId = resolveSessionId(request);
         String userId = resolveUserId(request);
@@ -67,19 +60,14 @@ public class OllamaAgentService {
                 .flatMap(message -> agent.call(new UserMessage(message), ctx))
                 .map(response -> {
                     String content = response.getContent().toString();
-                    log.debug("Chat response: sessionId={}, contentLength={}", sessionId, content.length());
+                    log.debug("Chat response: sessionId={}, length={}", sessionId, content.length());
                     return ChatResponse.success(sessionId, content);
                 })
                 .onErrorMap(e -> new AgentException("对话处理失败: " + e.getMessage(), e, sessionId))
-                .doOnNext(r -> log.info("Chat completed: sessionId={}, success={}", sessionId, r.isSuccess()));
+                .doOnNext(r -> log.info("Chat completed: sessionId={}", sessionId));
     }
 
-    /**
-     * 流式输出对话
-     *
-     * @param request 对话请求
-     * @return 流式文本片段
-     */
+    @Override
     public Flux<String> chatStream(ChatRequest request) {
         String sessionId = resolveSessionId(request);
         String userId = resolveUserId(request);
@@ -99,9 +87,11 @@ public class OllamaAgentService {
                 });
     }
 
-    /**
-     * 解析会话ID，若未提供则生成UUID
-     */
+    @Override
+    public String getStatus() {
+        return "OllamaAgent状态: 就绪 (model=" + properties.getModel() + ")";
+    }
+
     private String resolveSessionId(ChatRequest request) {
         if (request.getSessionId() == null || request.getSessionId().isBlank()) {
             return UUID.randomUUID().toString();
@@ -109,9 +99,6 @@ public class OllamaAgentService {
         return request.getSessionId();
     }
 
-    /**
-     * 解析用户ID
-     */
     private String resolveUserId(ChatRequest request) {
         if (request.getUserId() == null || request.getUserId().isBlank()) {
             return properties.getDefaultUserId();

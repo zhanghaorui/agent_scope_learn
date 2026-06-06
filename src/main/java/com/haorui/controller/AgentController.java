@@ -1,6 +1,6 @@
 package com.haorui.controller;
 
-import com.haorui.agent.OllamaAgentService;
+import com.haorui.agent.AgentChatService;
 import com.haorui.dto.ChatRequest;
 import com.haorui.dto.ChatResponse;
 import jakarta.validation.Valid;
@@ -23,7 +23,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AgentController {
 
-    private final OllamaAgentService agentService;
+    private final AgentChatService agentService;
 
     /**
      * 对话接口
