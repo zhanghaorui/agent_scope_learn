@@ -38,4 +38,11 @@ build/
 .DS_Store
 
 ### AgentScope Workspace ###
-.agentscope/
+# 忽略运行时生成的文件，但保留配置文件
+.agentscope/workspace/agents/
+.agentscope/workspace/MEMORY.md
+.agentscope/workspace/memory/
+.agentscope/workspace/sessions/
+# 保留以下文件（团队共享）
+!.agentscope/workspace/AGENTS.md
+!.agentscope/workspace/skills/
