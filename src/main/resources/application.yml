@@ -2,11 +2,12 @@ spring:
   application:
     name: agent-scope-learn
 
-# Ollama配置 (确保本地Ollama服务已启动，默认端口11434)
-# 启动Ollama: ollama serve
-# 拉取模型: ollama pull qwen2.5:7b (或其他模型如 llama3.2, mistral等)
-
+# AgentScope Ollama配置
 agentscope:
   ollama:
     base-url: http://localhost:11434
-    model: qwen2.5:7b  # 可根据本地已安装的模型修改
+    model: qwen3:8b              # 千问3 8B模型
+    agent-name: ollama-assistant
+    sys-prompt: 你是一个友好的AI助手，使用中文回答问题。
+    workspace-path: .agentscope/workspace
+    default-user-id: user

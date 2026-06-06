@@ -1,14 +1,21 @@
 package com.haorui.controller;
 
 import com.haorui.agent.OllamaAgentService;
+import com.haorui.dto.ChatRequest;
+import com.haorui.dto.ChatResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
+import java.util.Map;
+
 /**
- * Agent REST接口
+ * Agent REST API控制器
  */
 @Slf4j
 @RestController
@@ -19,40 +26,40 @@ public class AgentController {
     private final OllamaAgentService agentService;
 
     /**
-     * 简单对话接口
+     * 对话接口
      *
-     * @param message 用户消息
-     * @param sessionId 会话ID（可选，默认为"default"）
-     * @return AI回复
+     * @param request 对话请求
+     * @return 对话响应
      */
     @PostMapping("/chat")
-    public Mono<String> chat(
-            @RequestBody String message,
-            @RequestParam(defaultValue = "default") String sessionId) {
-        log.info("Received chat request: {}", message);
-        return agentService.chat(message, sessionId);
+    public Mono<ChatResponse> chat(@Valid @RequestBody ChatRequest request) {
+        log.info("Chat request: sessionId={}, messageLength={}",
+                request.getSessionId(), request.getMessage().length());
+        return agentService.chat(request);
     }
 
     /**
-     * 流式对话接口
+     * 流式对话接口（Server-Sent Events）
      *
-     * @param message 用户消息
-     * @param sessionId 会话ID（可选，默认为"default"）
-     * @return 流式AI回复
+     * @param request 对话请求
+     * @return 流式文本片段
      */
-    @PostMapping("/chat/stream")
-    public Flux<String> chatStream(
-            @RequestBody String message,
-            @RequestParam(defaultValue = "default") String sessionId) {
-        log.info("Received streaming chat request: {}", message);
-        return agentService.chatStream(message, sessionId);
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> chatStream(@Valid @RequestBody ChatRequest request) {
+        log.info("Stream chat request: sessionId={}, messageLength={}",
+                request.getSessionId(), request.getMessage().length());
+        return agentService.chatStream(request);
     }
 
     /**
      * 健康检查
      */
     @GetMapping("/health")
-    public String health() {
-        return "Agent service is running!";
+    public Map<String, Object> health() {
+        return Map.of(
+                "status", "UP",
+                "service", "AgentScope Ollama Service",
+                "timestamp", LocalDateTime.now()
+        );
     }
 }

@@ -1,76 +1,121 @@
 package com.haorui.agent;
 
+import com.haorui.config.OllamaProperties;
+import com.haorui.dto.ChatRequest;
+import com.haorui.dto.ChatResponse;
+import com.haorui.exception.AgentException;
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.event.AgentEventType;
+import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.UserMessage;
-import io.agentscope.core.model.OllamaChatModel;
 import io.agentscope.harness.agent.HarnessAgent;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.UUID;
 
 /**
- * Ollama Agent服务示例
+ * Ollama Agent服务
  * 使用AgentScope Harness Agent连接本地Ollama
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class OllamaAgentService {
 
-    private final HarnessAgent agent;
+    private final OllamaProperties properties;
+    private HarnessAgent agent;
 
-    public OllamaAgentService() {
-        // 初始化工作区目录
-        Path workspace = Paths.get(".agentscope/workspace");
+    @PostConstruct
+    public void init() {
+        Path workspace = Paths.get(properties.getWorkspacePath());
+        String modelId = "ollama:" + properties.getModel();
 
-        // 使用Ollama模型
-        // 注意: 使用 ModelRegistry 简化配置时，只需 .model("ollama:模型名")
-        // 例如: .model("ollama:qwen2.5:7b") 或 .model("ollama:llama3.2")
         this.agent = HarnessAgent.builder()
-                .name("ollama-assistant")
-                .sysPrompt("你是一个友好的AI助手，使用中文回答问题。")
-                .model("ollama:qwen2.5:7b")  // 自动连接本地Ollama (localhost:11434)
+                .name(properties.getAgentName())
+                .sysPrompt(properties.getSysPrompt())
+                .model(modelId)
                 .workspace(workspace)
                 .build();
 
-        log.info("Ollama Agent initialized with model: qwen2.5:7b");
+        log.info("HarnessAgent initialized: name={}, model={}, workspace={}",
+                properties.getAgentName(), modelId, workspace);
     }
 
     /**
      * 与Agent进行对话
      *
-     * @param userInput 用户输入
-     * @param sessionId 会话ID（相同ID可保持对话上下文）
-     * @return Agent的回复
+     * @param request 对话请求
+     * @return 对话响应
      */
-    public Mono<String> chat(String userInput, String sessionId) {
+    public Mono<ChatResponse> chat(ChatRequest request) {
+        String sessionId = resolveSessionId(request);
+        String userId = resolveUserId(request);
+
         RuntimeContext ctx = RuntimeContext.builder()
                 .sessionId(sessionId)
-                .userId("user")
+                .userId(userId)
                 .build();
 
-        return agent.call(new UserMessage(userInput), ctx)
-                .map(response -> response.getContent().toString());
+        return Mono.fromCallable(() -> request.getMessage())
+                .flatMap(message -> agent.call(new UserMessage(message), ctx))
+                .map(response -> {
+                    String content = response.getContent().toString();
+                    log.debug("Chat response: sessionId={}, contentLength={}", sessionId, content.length());
+                    return ChatResponse.success(sessionId, content);
+                })
+                .onErrorMap(e -> new AgentException("对话处理失败: " + e.getMessage(), sessionId, e))
+                .doOnNext(r -> log.info("Chat completed: sessionId={}, success={}", sessionId, r.isSuccess()));
     }
 
     /**
-     * 流式输出对话（实时获取回复）
-     * 适用于Web界面或控制台实时显示
+     * 流式输出对话
      *
-     * @param userInput 用户输入
-     * @param sessionId 会话ID
+     * @param request 对话请求
      * @return 流式文本片段
      */
-    public reactor.core.publisher.Flux<String> chatStream(String userInput, String sessionId) {
+    public Flux<String> chatStream(ChatRequest request) {
+        String sessionId = resolveSessionId(request);
+        String userId = resolveUserId(request);
+
         RuntimeContext ctx = RuntimeContext.builder()
                 .sessionId(sessionId)
-                .userId("user")
+                .userId(userId)
                 .build();
 
-        return agent.streamEvents(new UserMessage(userInput), ctx)
-                .filter(event -> event.getType().name().equals("TEXT_BLOCK_DELTA"))
-                .map(event -> event.toString());
+        return agent.streamEvents(new UserMessage(request.getMessage()), ctx)
+                .filter(event -> event.getType() == AgentEventType.TEXT_BLOCK_DELTA)
+                .cast(TextBlockDeltaEvent.class)
+                .map(TextBlockDeltaEvent::getDelta)
+                .onErrorResume(e -> {
+                    log.error("Stream error: sessionId={}, error={}", sessionId, e.getMessage());
+                    return Flux.just("[错误] 流式输出失败: " + e.getMessage());
+                });
+    }
+
+    /**
+     * 解析会话ID，若未提供则生成UUID
+     */
+    private String resolveSessionId(ChatRequest request) {
+        if (request.getSessionId() == null || request.getSessionId().isBlank()) {
+            return UUID.randomUUID().toString();
+        }
+        return request.getSessionId();
+    }
+
+    /**
+     * 解析用户ID
+     */
+    private String resolveUserId(ChatRequest request) {
+        if (request.getUserId() == null || request.getUserId().isBlank()) {
+            return properties.getDefaultUserId();
+        }
+        return request.getUserId();
     }
 }
