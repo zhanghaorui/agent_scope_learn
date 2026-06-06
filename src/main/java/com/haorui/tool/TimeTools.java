@@ -1,9 +1,7 @@
 package com.haorui.tool;
 
-import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.core.tool.Tool;
-import io.agentscope.core.tool.ToolResultBlock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
