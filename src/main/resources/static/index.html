@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AgentScope 对话演示</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── 顶栏 ── */
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    header h1 { font-size: 17px; font-weight: 600; flex: 1; }
+    header .badge {
+      font-size: 11px;
+      background: #4ade80;
+      color: #052e16;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    /* ── 工具栏 ── */
+    .toolbar {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .toolbar label { font-size: 13px; color: #6b7280; font-weight: 500; }
+    select, button {
+      font-size: 13px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      padding: 6px 12px;
+      cursor: pointer;
+      outline: none;
+      transition: all .15s;
+    }
+    select { background: #f9fafb; color: #111; }
+    select:hover { border-color: #6366f1; }
+    .btn-new {
+      background: #6366f1;
+      color: #fff;
+      border-color: #6366f1;
+      font-weight: 600;
+    }
+    .btn-new:hover { background: #4f46e5; }
+    .btn-danger { background: #fff; color: #ef4444; border-color: #fca5a5; }
+    .btn-danger:hover { background: #fef2f2; }
+    .stream-toggle {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; color: #6b7280; font-weight: 500;
+    }
+    .stream-toggle input { cursor: pointer; accent-color: #6366f1; width: 15px; height: 15px; }
+    #session-info {
+      margin-left: auto;
+      font-size: 11px;
+      color: #9ca3af;
+      background: #f3f4f6;
+      padding: 4px 10px;
+      border-radius: 6px;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── 聊天区域 ── */
+    #chat-box {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* 消息气泡 */
+    .msg { display: flex; gap: 10px; max-width: 80%; }
+    .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .msg.assistant { align-self: flex-start; }
+
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .msg.user .avatar { background: #e0e7ff; }
+    .msg.assistant .avatar { background: #dcfce7; }
+
+    .bubble {
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user .bubble {
+      background: #6366f1;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.assistant .bubble {
+      background: #fff;
+      color: #111;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+
+    /* 打字指示 */
+    .typing .bubble::after {
+      content: '▋';
+      display: inline-block;
+      animation: blink .7s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0 } }
+
+    /* 错误消息 */
+    .msg.error .bubble {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    /* 系统提示 */
+    .sys-msg {
+      text-align: center;
+      font-size: 12px;
+      color: #9ca3af;
+      padding: 4px 0;
+    }
+
+    /* ── 输入区 ── */
+    .input-area {
+      background: #fff;
+      border-top: 1px solid #e5e7eb;
+      padding: 14px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    #input-msg {
+      flex: 1;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 14px;
+      resize: none;
+      max-height: 140px;
+      line-height: 1.5;
+      outline: none;
+      transition: border-color .15s;
+      font-family: inherit;
+    }
+    #input-msg:focus { border-color: #6366f1; }
+    #send-btn {
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 18px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: background .15s;
+      line-height: 1;
+    }
+    #send-btn:hover:not(:disabled) { background: #4f46e5; }
+    #send-btn:disabled { background: #c7d2fe; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 AgentScope 对话演示</h1>
+  <span class="badge" id="status-badge">连接中…</span>
+</header>
+
+<div class="toolbar">
+  <label>Agent 类型</label>
+  <select id="agent-type">
+    <option value="agent">基础对话 (/api/agent)</option>
+    <option value="tool-agent">工具 Agent (/api/tool-agent)</option>
+    <option value="mcp-agent">MCP Agent (/api/mcp-agent)</option>
+  </select>
+
+  <label class="stream-toggle">
+    <input type="checkbox" id="stream-mode" checked/>
+    流式输出
+  </label>
+
+  <button class="btn-new" onclick="newSession()">＋ 新会话</button>
+  <button class="btn-danger" onclick="clearChat()">🗑 清空</button>
+
+  <span id="session-info">未创建会话</span>
+</div>
+
+<div id="chat-box">
+  <div class="sys-msg">点击「新会话」开始对话，或直接发送消息（自动建会话）</div>
+</div>
+
+<div class="input-area">
+  <textarea id="input-msg" rows="1" placeholder="输入消息… (Shift+Enter 换行，Enter 发送)"></textarea>
+  <button id="send-btn" onclick="sendMessage()" title="发送">➤</button>
+</div>
+
+<script>
+  let sessionId = null;
+  let isStreaming = false;
+
+  // ── 健康检查 ──
+  async function healthCheck() {
+    try {
+      const r = await fetch('/api/agent/health');
+      if (r.ok) {
+        document.getElementById('status-badge').textContent = '已连接';
+        document.getElementById('status-badge').style.background = '#4ade80';
+      }
+    } catch {
+      document.getElementById('status-badge').textContent = '离线';
+      document.getElementById('status-badge').style.background = '#f87171';
+      document.getElementById('status-badge').style.color = '#fff';
+    }
+  }
+
+  // ── 新建会话 ──
+  async function newSession() {
+    try {
+      const r = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({userId: 'user', agentType: document.getElementById('agent-type').value})
+      });
+      const data = await r.json();
+      sessionId = data.sessionId;
+      document.getElementById('session-info').textContent = 'Session: ' + sessionId;
+      appendSys('✅ 新会话已创建: ' + sessionId.substring(0, 8) + '…');
+    } catch (e) {
+      appendSys('⚠️ 创建会话失败，将自动生成临时 ID');
+      sessionId = crypto.randomUUID();
+    }
+  }
+
+  // ── 发送消息 ──
+  async function sendMessage() {
+    const textarea = document.getElementById('input-msg');
+    const text = textarea.value.trim();
+    if (!text || isStreaming) return;
+
+    // 自动建会话
+    if (!sessionId) await newSession();
+
+    textarea.value = '';
+    textarea.style.height = 'auto';
+
+    appendMsg('user', text);
+
+    const agentType = document.getElementById('agent-type').value;
+    const useStream = document.getElementById('stream-mode').checked;
+    const endpoint = useStream
+        ? `/api/${agentType}/chat/stream`
+        : `/api/${agentType}/chat`;
+
+    const body = JSON.stringify({message: text, sessionId});
+
+    if (useStream) {
+      await streamChat(endpoint, body);
+    } else {
+      await normalChat(endpoint, body);
+    }
+  }
+
+  // ── 普通请求 ──
+  async function normalChat(url, body) {
+    const bubble = appendMsg('assistant', '');
+    bubble.classList.add('typing');
+    setLoading(true);
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body
+      });
+      const data = await r.json();
+      bubble.classList.remove('typing');
+      if (data.success) {
+        bubble.querySelector('.bubble').textContent = data.content;
+        if (data.sessionId) sessionId = data.sessionId;
+      } else {
+        bubble.classList.add('error');
+        bubble.querySelector('.bubble').textContent = '❌ ' + (data.errorMessage || '未知错误');
+      }
+    } catch (e) {
+      bubble.classList.remove('typing');
+      bubble.classList.add('error');
+      bubble.querySelector('.bubble').textContent = '❌ 请求失败: ' + e.message;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── 流式请求（fetch + ReadableStream）──
+  async function streamChat(url, body) {
+    const msgEl = appendMsg('assistant', '');
+    msgEl.classList.add('typing');
+    const bubbleEl = msgEl.querySelector('.bubble');
+    setLoading(true);
+    isStreaming = true;
+    let fullText = '';
+
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'text/event-stream'},
+        body
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream: true});
+
+        // 解析 SSE: "data: ..." 行
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // 保留未完整的行
+
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const chunk = line.slice(5); // 去掉 "data:"
+            fullText += chunk;
+            bubbleEl.textContent = fullText;
+            scrollToBottom();
+          }
+        }
+      }
+    } catch (e) {
+      msgEl.classList.add('error');
+      bubbleEl.textContent = '❌ 流式输出失败: ' + e.message;
+    } finally {
+      msgEl.classList.remove('typing');
+      setLoading(false);
+      isStreaming = false;
+      scrollToBottom();
+    }
+  }
+
+  // ── DOM 工具 ──
+  function appendMsg(role, text) {
+    const box = document.getElementById('chat-box');
+    const div = document.createElement('div');
+    div.className = 'msg ' + role;
+    const emoji = role === 'user' ? '🧑' : '🤖';
+    div.innerHTML = `
+      <div class="avatar">${emoji}</div>
+      <div class="bubble">${escHtml(text)}</div>
+    `;
+    if (role === 'assistant') {
+      // 允许直接设置 textContent（流式更新）
+      div.querySelector('.bubble').textContent = text;
+    }
+    box.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  function appendSys(text) {
+    const box = document.getElementById('chat-box');
+    const div = document.createElement('div');
+    div.className = 'sys-msg';
+    div.textContent = text;
+    box.appendChild(div);
+    scrollToBottom();
+  }
+
+  function clearChat() {
+    document.getElementById('chat-box').innerHTML =
+        '<div class="sys-msg">会话已清空（sessionId 保持不变）</div>';
+  }
+
+  function scrollToBottom() {
+    const box = document.getElementById('chat-box');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setLoading(on) {
+    document.getElementById('send-btn').disabled = on;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Enter 发送 / Shift+Enter 换行 ──
+  document.getElementById('input-msg').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // 自动撑高 textarea
+  document.getElementById('input-msg').addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  });
+
+  // ── 初始化 ──
+  healthCheck();
+</script>
+</body>
+</html>
+

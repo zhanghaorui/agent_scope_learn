@@ -6,10 +6,12 @@ import com.haorui.dto.ChatRequest;
 import com.haorui.dto.ChatResponse;
 import com.haorui.exception.AgentException;
 import com.haorui.service.McpAgentService;
+import com.haorui.util.AgentContextUtils;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.UserMessage;
+import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.core.tool.mcp.McpClientBuilder;
 import io.agentscope.core.tool.mcp.McpClientWrapper;
@@ -21,12 +23,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * MCP Agent服务实现
@@ -177,6 +181,7 @@ public class McpAgentServiceImpl implements McpAgentService {
                 .model(modelId)
                 .toolkit(toolkit)
                 .workspace(workspace)
+                .generateOptions(GenerateOptions.builder().build())  // 防止 streamEvents 时 options NPE
                 .build();
     }
 
@@ -198,11 +203,11 @@ public class McpAgentServiceImpl implements McpAgentService {
         }
 
         return Mono.defer(() -> {
-            RuntimeContext ctx = buildContext(request);
+            RuntimeContext ctx = AgentContextUtils.buildContext(request, ollamaProperties.getDefaultUserId());
             return agent.call(new UserMessage(request.getMessage()), ctx)
                     .map(response -> ChatResponse.success(ctx.getSessionId(), response.getContent().toString()))
                     .onErrorMap(e -> new AgentException("对话处理失败: " + e.getMessage(), e, ctx.getSessionId()));
-        });
+        }).subscribeOn(Schedulers.boundedElastic());   // 避免在 NIO 线程上阻塞
     }
 
     @Override
@@ -212,13 +217,24 @@ public class McpAgentServiceImpl implements McpAgentService {
         }
 
         return Flux.defer(() -> {
-            RuntimeContext ctx = buildContext(request);
+            RuntimeContext ctx = AgentContextUtils.buildContext(request, ollamaProperties.getDefaultUserId());
+            AtomicBoolean hasEmitted = new AtomicBoolean(false);
+
             return agent.streamEvents(new UserMessage(request.getMessage()), ctx)
                     .filter(event -> event.getType() == AgentEventType.TEXT_BLOCK_DELTA)
                     .cast(TextBlockDeltaEvent.class)
-                    .map(TextBlockDeltaEvent::getDelta)
-                    .onErrorResume(e -> Flux.just("[错误] " + e.getMessage()));
-        });
+                    .map(delta -> {
+                        hasEmitted.set(true);
+                        return delta.getDelta();
+                    })
+                    .onErrorResume(e -> {
+                        if (hasEmitted.get()) {
+                            log.warn("Suppressed post-response framework error: {}", e.getMessage());
+                            return Flux.empty();
+                        }
+                        return Flux.just("[错误] " + e.getMessage());
+                    });
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
@@ -243,33 +259,25 @@ public class McpAgentServiceImpl implements McpAgentService {
         return mcpProperties.isEnabled() && ready && agent != null;
     }
 
-    private RuntimeContext buildContext(ChatRequest request) {
-        return RuntimeContext.builder()
-                .sessionId(resolveSessionId(request))
-                .userId(resolveUserId(request))
-                .build();
-    }
-
     @PreDestroy
     public void shutdown() {
         log.info("Shutting down MCP service...");
+        mcpClients.forEach((name, client) -> {
+            try {
+                if (client instanceof AutoCloseable closeable) {
+                    closeable.close();
+                    log.debug("MCP client '{}' closed", name);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to close MCP client '{}': {}", name, e.getMessage());
+            }
+        });
         mcpClients.clear();
         serverStatuses.clear();
         ready = false;
         log.info("MCP service shutdown complete");
     }
 
-    private String resolveSessionId(ChatRequest request) {
-        return request.getSessionId() == null || request.getSessionId().isBlank()
-                ? UUID.randomUUID().toString()
-                : request.getSessionId();
-    }
-
-    private String resolveUserId(ChatRequest request) {
-        return request.getUserId() == null || request.getUserId().isBlank()
-                ? ollamaProperties.getDefaultUserId()
-                : request.getUserId();
-    }
 
     @Getter
     public static class ServerStatus {

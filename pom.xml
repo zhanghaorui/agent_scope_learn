@@ -32,9 +32,10 @@
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- WebFlux（非阻塞，支持真正的 SSE 流式输出） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
         <!-- Validation -->
@@ -48,6 +49,13 @@
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-harness</artifactId>
             <version>${agentscope.version}</version>
+        </dependency>
+
+        <!-- exp4j 数学表达式解析（替换手写计算器） -->
+        <dependency>
+            <groupId>net.objecthunter</groupId>
+            <artifactId>exp4j</artifactId>
+            <version>0.4.8</version>
         </dependency>
 
         <!-- Lombok -->

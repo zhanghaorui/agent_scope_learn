@@ -2,13 +2,18 @@ spring:
   application:
     name: agent-scope-learn
 
+logging:
+  level:
+    io.agentscope: DEBUG   # 查看 AgentScope 实际发给模型的完整 prompt
+
 # AgentScope Ollama配置
 agentscope:
   ollama:
     base-url: http://localhost:11434
     model: qwen3:8b              # 千问3 8B模型
     agent-name: ollama-assistant
-    sys-prompt: 你是一个友好的AI助手，使用中文回答问题。
+    # /no_think 关闭 qwen3 深度思考模式，响应更快；如需推理链改为 /think
+    sys-prompt: "/no_think 你是一个基于Qwen3模型的AI助手，名字叫\"浩锐\"，使用中文简洁友好地回答问题。"
     workspace-path: .agentscope/workspace
     default-user-id: user
 
