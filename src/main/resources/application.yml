@@ -11,3 +11,22 @@ agentscope:
     sys-prompt: 你是一个友好的AI助手，使用中文回答问题。
     workspace-path: .agentscope/workspace
     default-user-id: user
+
+  # MCP配置（需要先安装MCP服务器：npx -y @modelcontextprotocol/server-filesystem）
+  mcp:
+    enabled: false  # 启用MCP需要先安装依赖
+    servers:
+      # 文件系统MCP - 支持读写文件
+      - name: filesystem
+        transport: stdio
+        command: npx
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+        active: true
+        enable-tools: ["read_file", "write_file", "list_directory"]
+      
+      # Git MCP - 支持Git操作
+      # - name: git
+      #   transport: stdio
+      #   command: python
+      #   args: ["-m", "mcp_server_git"]
+      #   active: true
